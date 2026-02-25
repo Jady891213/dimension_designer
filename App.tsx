@@ -118,12 +118,78 @@ export default function App() {
   const [isQuerying, setIsQuerying] = useState(false);
   const [showOnlyActive, setShowOnlyActive] = useState(false);
   const [isBatchEditing, setIsBatchEditing] = useState(false);
+  const [temporalOverrides, setTemporalOverrides] = useState<Record<string, Record<number, 'Y' | 'N'>>>({});
+  const [editingCell, setEditingCell] = useState<{nodeCode: string, period: number} | null>(null);
   const [pov, setPov] = useState<AppContext>({
     scenario: 'Actual',
     version: 'Working',
     years: [2024],
     periods: [1, 2, 3, 4, 5]
   });
+
+  const getStatus = (nodeCode: string, period: number) => {
+    if (temporalOverrides[nodeCode]?.[period]) {
+      return temporalOverrides[nodeCode][period];
+    }
+    let status = 'Y';
+    if (nodeCode === 'SH_OFFICE' && period > 6) status = 'N';
+    if (nodeCode === 'SZ_R_D' && period < 3) status = 'N';
+    return status;
+  };
+
+  const handleStatusChange = (nodeCode: string, period: number, newStatus: 'Y' | 'N', applyFuture: boolean) => {
+    setTemporalOverrides(prev => {
+      const next = { ...prev };
+      if (!next[nodeCode]) next[nodeCode] = {};
+      
+      if (applyFuture) {
+        PERIODS.forEach(p => {
+          if (p >= period) {
+            next[nodeCode][p] = newStatus;
+          }
+        });
+      } else {
+        next[nodeCode][period] = newStatus;
+      }
+      return next;
+    });
+    setEditingCell(null);
+  };
+
+  const TemporalCell = ({ nodeCode, p }: { nodeCode: string, p: number }) => {
+    const status = getStatus(nodeCode, p);
+    const isEditing = editingCell?.nodeCode === nodeCode && editingCell?.period === p;
+    
+    return (
+      <td className="px-4 py-4 text-center border-r border-slate-100 relative">
+        <div 
+          onClick={() => setEditingCell({nodeCode, period: p})}
+          className={`w-6 h-6 rounded-full text-[10px] font-bold flex items-center justify-center mx-auto transition-all cursor-pointer hover:ring-2 hover:ring-blue-200 ${status === 'Y' ? 'bg-green-50 text-green-600' : 'bg-slate-100 text-slate-300'}`}
+        >
+          {status}
+        </div>
+        {isEditing && (
+          <>
+            <div className="fixed inset-0 z-40" onClick={() => setEditingCell(null)} />
+            <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 bg-white border border-slate-200 shadow-xl rounded-lg py-1 w-44 z-50">
+              <button 
+                className="w-full px-3 py-2 text-[12px] text-slate-700 hover:bg-slate-50 text-left"
+                onClick={(e) => { e.stopPropagation(); handleStatusChange(nodeCode, p, status === 'Y' ? 'N' : 'Y', false); }}
+              >
+                {status === 'Y' ? '设为无效' : '设为有效'}
+              </button>
+              <button 
+                className="w-full px-3 py-2 text-[12px] text-slate-700 hover:bg-slate-50 text-left"
+                onClick={(e) => { e.stopPropagation(); handleStatusChange(nodeCode, p, status === 'Y' ? 'N' : 'Y', true); }}
+              >
+                {status === 'Y' ? '此期间及以后设为无效' : '此期间及以后设为有效'}
+              </button>
+            </div>
+          </>
+        )}
+      </td>
+    );
+  };
 
   // Definition Module States
   const [hideSystemFields, setHideSystemFields] = useState(false);
@@ -438,7 +504,7 @@ export default function App() {
                 {showOnlyActive ? '仅看有效关系' : '显示所有关系'}
               </button>
               <button onClick={() => setIsBatchEditing(true)} className="px-4 py-1.5 text-[12px] bg-slate-900 text-white rounded-lg flex items-center gap-2 font-bold hover:bg-slate-800 transition-colors">
-                <Edit3 size={14}/> 进入编辑
+                <Edit3 size={14}/> 批量编辑
               </button>
             </div>
           </header>
@@ -470,9 +536,7 @@ export default function App() {
                          </div>
                        </td>
                        {pov.periods.map(p => (
-                         <td key={p} className="px-4 py-4 text-center border-r border-slate-100">
-                           <div className="w-6 h-6 rounded-full bg-green-50 text-green-600 text-[10px] font-bold flex items-center justify-center mx-auto">Y</div>
-                         </td>
+                         <TemporalCell key={p} nodeCode={node.code} p={p} />
                        ))}
                      </tr>
                      {node.children.map(child => (
@@ -483,18 +547,11 @@ export default function App() {
                              <div><div className="text-[12px] font-bold text-slate-700">{child.code}</div><div className="text-[10px] text-slate-400">{child.name}</div></div>
                            </td>
                            {pov.periods.map(p => (
-                             <td key={p} className="px-4 py-4 text-center border-r border-slate-100">
-                               <div className="w-6 h-6 rounded-full bg-green-50 text-green-600 text-[10px] font-bold flex items-center justify-center mx-auto">Y</div>
-                             </td>
+                             <TemporalCell key={p} nodeCode={child.code} p={p} />
                            ))}
                          </tr>
                          {child.children.map(leaf => {
-                            const isCurrentlyActive = pov.periods.some(p => {
-                               let active = true;
-                               if (leaf.code === 'SH_OFFICE' && p > 6) active = false;
-                               if (leaf.code === 'SZ_R_D' && p < 3) active = false;
-                               return active;
-                            });
+                            const isCurrentlyActive = pov.periods.some(p => getStatus(leaf.code, p) === 'Y');
 
                             if (showOnlyActive && !isCurrentlyActive) return null;
 
@@ -507,16 +564,9 @@ export default function App() {
                                     {leaf.code === 'SZ_R_D' && '2024年3月新设'}
                                   </div></div>
                                 </td>
-                                {pov.periods.map(p => {
-                                  let status = 'Y';
-                                  if (leaf.code === 'SH_OFFICE' && p > 6) status = 'N';
-                                  if (leaf.code === 'SZ_R_D' && p < 3) status = 'N';
-                                  return (
-                                    <td key={p} className="px-4 py-4 text-center border-r border-slate-100">
-                                      <div className={`w-6 h-6 rounded-full text-[10px] font-bold flex items-center justify-center mx-auto transition-all ${status === 'Y' ? 'bg-green-50 text-green-600' : 'bg-slate-100 text-slate-300'}`}>{status}</div>
-                                    </td>
-                                  );
-                                })}
+                                {pov.periods.map(p => (
+                                  <TemporalCell key={p} nodeCode={leaf.code} p={p} />
+                                ))}
                               </tr>
                             );
                          })}
