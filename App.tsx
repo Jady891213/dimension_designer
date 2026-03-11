@@ -37,7 +37,9 @@ import {
   Trash2,
   EyeOff,
   Copy,
-  ChevronUp
+  ChevronUp,
+  Calendar,
+  TrendingUp
 } from 'lucide-react';
 import { 
   INITIAL_DIMENSION_TREE, 
@@ -104,6 +106,17 @@ const Toggle = ({ active, onChange }: { active: boolean, onChange: (v: boolean) 
     <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${active ? 'right-0.5' : 'left-0.5'}`} />
   </button>
 );
+
+const DIMENSION_TYPES = [
+  { id: 'general', name: '通用类', icon: Network, desc: '适用于常规业务维度的定义与管理' },
+  { id: 'scenario', name: '场景类', icon: Layers, desc: '用于区分实际、预算、预测等不同业务场景' },
+  { id: 'version', name: '版本类', icon: Copy, desc: '管理数据的不同版本迭代与快照' },
+  { id: 'entity', name: '实体类', icon: FolderTree, desc: '定义组织架构、公司主体等层级关系' },
+  { id: 'account', name: '科目类', icon: FileText, desc: '财务科目体系及相关属性管理' },
+  { id: 'year', name: '年份类', icon: Calendar, desc: '定义时间维度中的年份层级' },
+  { id: 'period', name: '期间类', icon: History, desc: '定义时间维度中的月度、季度等期间' },
+  { id: 'movement', name: '变动类', icon: TrendingUp, desc: '追踪数据的期初、发生、期末等变动过程' },
+];
 
 export default function App() {
   const [activeModule, setActiveModule] = useState<'data' | 'definition' | 'subset'>('data');
@@ -199,6 +212,10 @@ export default function App() {
   const [subsetUserFilter, setSubsetUserFilter] = useState('All');
   const [poolSearch, setPoolSearch] = useState('');
   const [selectedSearch, setSelectedSearch] = useState('');
+
+  // Initial Modal States
+  const [showNewDimensionModal, setShowNewDimensionModal] = useState(true);
+  const [selectedDimensionType, setSelectedDimensionType] = useState<string | null>(null);
 
   const togglePeriod = (p: number) => {
     setPov(prev => ({
@@ -992,6 +1009,62 @@ export default function App() {
 
   return (
     <div className="flex h-screen w-full bg-slate-50 font-sans overflow-hidden select-none">
+      {showNewDimensionModal && (
+        <div className="fixed inset-0 z-[100] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-50 rounded-3xl shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200">
+            <div className="p-8 pb-6 text-center">
+              <h2 className="text-[24px] font-bold text-slate-800">维度类型</h2>
+              <p className="text-[14px] text-slate-500 mt-2">请选择您要创建的维度类型，不同类型将提供特定的预置属性与功能</p>
+            </div>
+            
+            <div className="p-8 pt-0 grid grid-cols-4 gap-4">
+              {DIMENSION_TYPES.map(type => {
+                const isSelected = selectedDimensionType === type.id;
+                return (
+                  <button
+                    key={type.id}
+                    onClick={() => setSelectedDimensionType(type.id)}
+                    className={`flex flex-col items-center p-6 rounded-2xl border-2 transition-all duration-200 bg-white ${
+                      isSelected 
+                        ? 'border-blue-500 shadow-[0_8px_30px_rgb(59,130,246,0.12)] scale-[1.02]' 
+                        : 'border-transparent shadow-sm hover:shadow-md hover:border-blue-100'
+                    }`}
+                  >
+                    <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 transition-colors ${
+                      isSelected ? 'bg-blue-50 text-blue-600' : 'bg-slate-50 text-slate-500'
+                    }`}>
+                      <type.icon size={32} strokeWidth={1.5} />
+                    </div>
+                    <h3 className={`text-[15px] font-bold mb-2 ${isSelected ? 'text-blue-700' : 'text-slate-700'}`}>
+                      {type.name}
+                    </h3>
+                    <p className="text-[11px] text-slate-400 text-center leading-relaxed">
+                      {type.desc}
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
+            
+            <div className="p-6 bg-white border-t border-slate-200 flex justify-end gap-3">
+              <button 
+                onClick={() => setShowNewDimensionModal(false)}
+                className="px-6 py-2.5 rounded-xl text-[14px] font-bold text-slate-500 hover:bg-slate-50 transition-colors"
+              >
+                取消
+              </button>
+              <button 
+                disabled={!selectedDimensionType}
+                onClick={() => setShowNewDimensionModal(false)}
+                className="px-8 py-2.5 rounded-xl text-[14px] font-bold bg-blue-600 text-white shadow-lg shadow-blue-100 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+              >
+                确认创建
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Side Rail */}
       <nav className="w-[56px] border-r border-slate-200 flex flex-col items-center py-8 gap-8 z-50 bg-white shadow-[1px_0_10px_rgba(0,0,0,0.02)]">
         <SideRailItem icon={Database} active={activeModule === 'data'} onClick={() => setActiveModule('data')} label="数据管理" />
